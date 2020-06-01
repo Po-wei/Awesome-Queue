@@ -175,7 +175,7 @@ public:
                 this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
                 // Some excited stuff here!
 
-                for(int i = 0 ; i < NUM_THREAD ; i++)
+                for(int i = 0 ; i < NUM_THREAD-1 ; i++)
                 {
                     localTailNext = localTail->next.load();
                     if(isDeleted(localTailNext))
@@ -198,49 +198,25 @@ public:
     {
         while(true)
         {
-            Node* localHead = this->head.load();
-            Node* localTail = this->tail.load();
-            Node* popCandidate = clearMark(localHead->next.load());
-
-            if( localHead == this->head.load())
-            {
-                // check isEmpty()
-
-                // cout << localHead << ' ' << localTail << endl;
-                // cout << popCandidate << endl;
-                if( localHead == localTail) // empty
-                {
-                    cout << __LINE__ << endl;
-                    // cout << popCandidate << endl;
-                    if( popCandidate == nullptr)
-                    {
-                        return false;
-                    }
-                    else
-                    {
-                        // help advance the tail
-                        this->tail.compare_exchange_strong(localTail, popCandidate);
-                    }
-                }
-                else if(isDeleted(popCandidate->next.load()))
-                {
-                    cout << __LINE__ << endl;
-                    this->tail.compare_exchange_strong(localTail, popCandidate);
-                    cout << "HERE" << endl;
-                    continue;
-                }
-                
-                // cout << popCandidate << endl;
-                ret = popCandidate->val;
-                //logical deleted
-                Node* candidateNext = popCandidate->next.load();
-                if(popCandidate->next.compare_exchange_strong(candidateNext, setMark(candidateNext)))
-                {
-                    // cout << __LINE__ << endl;
-                    this->head.compare_exchange_strong( localHead, popCandidate);
-                    return true;
-                }
-            }
+           Node* localHead = this->head.load();
+           Node* localHeadNext = localHead->next.load();
+           if(localHead == this->head.load())
+           {
+               if( isDeleted(localHeadNext))
+               {
+                   if(clearMark(localHeadNext) == nullptr)
+                   {
+                       return false;
+                   }
+                   this->head.compare_exchange_strong(localHead, clearMark(localHeadNext));
+                   continue;
+               }
+               else if(localHead->next.compare_exchange_strong(localHeadNext, setMark(localHeadNext)))
+               {
+                   ret = localHead->val;
+                   return true;
+               }
+           }
         }
     }
 
