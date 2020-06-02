@@ -185,25 +185,37 @@ public:
     {
         while(true)
         {
-           Node* localHead = this->head.load();
-           Node* localHeadNext = localHead->next.load();
-           if(localHead == this->head.load())
-           {
-               if( isDeleted(localHeadNext))
-               {
-                   if(clearMark(localHeadNext) == nullptr)
-                   {
-                       return false;
-                   }
-                   this->head.compare_exchange_strong(localHead, clearMark(localHeadNext));
-                   continue;
-               }
-               else if(localHead->next.compare_exchange_strong(localHeadNext, setMark(localHeadNext)))
-               {
-                   ret = localHead->val;
-                   return true;
-               }
-           }
+            Node* localHead = this->head.load();
+            Node* localTail = this->tail.load();
+            Node* popCandidate = clearMark(localHead->next.load());
+
+            if( localHead == this->head.load())
+            {
+                if( localHead == localTail) // empty
+                {
+                    if( popCandidate == nullptr)
+                    {
+                        return false;
+                    }
+                    else
+                    {
+                        this->tail.compare_exchange_strong(localTail, popCandidate);
+                    }
+                }
+                else if(isDeleted(popCandidate->next.load()))
+                {
+                    this->tail.compare_exchange_strong(localTail, popCandidate);
+                    continue;
+                }
+                
+                ret = popCandidate->val;
+                Node* candidateNext = popCandidate->next.load();
+                if(popCandidate->next.compare_exchange_strong(candidateNext, setMark(candidateNext)))
+                {
+                    this->head.compare_exchange_strong( localHead, popCandidate);
+                    return true;
+                }
+            }
         }
     }
 
