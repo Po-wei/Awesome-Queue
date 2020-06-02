@@ -98,9 +98,8 @@ public:
                     {
                         return false;
                     }
-                    else
+                    else // help advance the tail
                     {
-                        // help advance the tail
                         this->tail.compare_exchange_strong(localTail, localHeadNext);
                     }
                 }
@@ -158,8 +157,6 @@ public:
                         return;
                     }
                 }
-                
-
                 localTailNext = localTail->next.load();
                 this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
                 // Some excited stuff here!
@@ -204,7 +201,7 @@ public:
                 }
                 else if(isDeleted(popCandidate->next.load()))
                 {
-                    this->tail.compare_exchange_strong(localTail, popCandidate);
+                    this->head.compare_exchange_strong(localHead, popCandidate);
                     continue;
                 }
                 
@@ -212,7 +209,7 @@ public:
                 Node* candidateNext = popCandidate->next.load();
                 if(popCandidate->next.compare_exchange_strong(candidateNext, setMark(candidateNext)))
                 {
-                    this->head.compare_exchange_strong( localHead, popCandidate);
+                    this->head.compare_exchange_strong(localHead, popCandidate);
                     return true;
                 }
             }
@@ -242,7 +239,7 @@ void insertTestA(QueueInterface &q)
     int r;
     for(int i = 0 ; i < TIMES ; i++)
     {
-        if (i % 20 == 0)
+        if (i % 5 == 0)
         {
             q.pop(r);
         }
