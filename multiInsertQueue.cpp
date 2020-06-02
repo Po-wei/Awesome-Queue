@@ -136,7 +136,6 @@ public:
 
     void push(int v) override
     {
-        // lock_guard<mutex> lg(lock);
         Node* newNode = new Node(v);
         newNode->next.store(nullptr);
         Node* localTail;
@@ -158,17 +157,11 @@ public:
                         this->tail.compare_exchange_strong(localTail, newNode);
                         return;
                     }
-                    localTailNext = localTail->next.load();
-                    if(clearMark(localTailNext) != nullptr)
-                    {
-                        this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
-                    }
                 }
-                else
-                {
-                    this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
-                }
+                
 
+                localTailNext = localTail->next.load();
+                this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
                 // Some excited stuff here!
                 // Insert in the middle
                 for(int i = 0 ; i < NUM_THREAD-1 ; i++)
@@ -272,7 +265,7 @@ int main()
 {
     // Already use polymorphism
     // Just Change the Type "MSqueue" or "AwesomeQueue"
-    MSQueue q;
+    AwesomeQueue q;
     vector<thread> workers;
     auto start = std::chrono::steady_clock::now();
     for(int i = 0 ; i < NUM_THREAD ; i++)
