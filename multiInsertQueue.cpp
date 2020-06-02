@@ -1,6 +1,7 @@
 #include <iostream>
 #include <atomic>
 #include <thread>
+#include <mutex>
 #include <functional>
 using namespace std;
 
@@ -101,7 +102,7 @@ public:
             Node* localHeadNext = localHead->next.load();
             if( localHead == this->head.load())
             {
-                if( localHead == localTail) // empty
+                if( localHead == localTail)  //empty
                 {
                     if( localHeadNext == nullptr)
                     {
@@ -148,16 +149,17 @@ public:
 
     void push(int v)
     {
+        // lock_guard<mutex> lg(lock);
         Node* newNode = new Node(v);
         newNode->next.store(nullptr);
         Node* localTail;
-
+        Node* localTailNext;
         // pointer here may contain mark
         // always clear the mark first
         while(true)
         {
             localTail = this->tail.load();
-            Node* localTailNext = localTail->next.load();
+            localTailNext = localTail->next.load();
             if( localTail == this->tail.load())
             {
                 // only one mark bit does not matter
@@ -169,12 +171,21 @@ public:
                         this->tail.compare_exchange_strong(localTail, newNode);
                         return;
                     }
+                    localTailNext = localTail->next.load();
+                    if(clearMark(localTailNext) != nullptr)
+                    {
+                        this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
+                    }
                 }
+                else
+                {
+                    this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
+                }
+                
 
                 //Tail always store clear-mark version.
                 this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
                 // Some excited stuff here!
-
                 for(int i = 0 ; i < NUM_THREAD-1 ; i++)
                 {
                     localTailNext = localTail->next.load();
@@ -196,6 +207,7 @@ public:
 
     bool pop(int& ret)
     {
+        // lock_guard<mutex> lg(lock);
         while(true)
         {
            Node* localHead = this->head.load();
@@ -208,6 +220,7 @@ public:
                    {
                        return false;
                    }
+                   cout << "1: CHANGE: " << clearMark(localHeadNext) << endl;
                    this->head.compare_exchange_strong(localHead, clearMark(localHeadNext));
                    continue;
                }
@@ -239,6 +252,7 @@ public:
 public:
     atomic<Node*> head;
     atomic<Node*> tail;
+    mutex lock;
 };
 
 void insertTestA(AwesomeQueue &ms)
@@ -247,6 +261,7 @@ void insertTestA(AwesomeQueue &ms)
     for(int i = 0 ; i < TIMES ; i++)
     {
         // ms.push(i);
+        ms.pop(r);
         ms.pop(r);
         // cout << ms.head << " " << ms.tail <<endl; 
     }
@@ -263,10 +278,10 @@ void insertTestB(AwesomeQueue &ms)
 
 void insertTestC(AwesomeQueue &ms)
 {
-    int r;
-    for(int i = 0 ; i < TIMES ; i++)
+    while(true)
     {
-        ms.pop(r);
+        cout << "MONITOR: " << ms.head << ' ' << ms.tail << endl;
+        std::this_thread::sleep_for(0.01s);
     }
 }
 
