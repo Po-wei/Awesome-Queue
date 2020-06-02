@@ -17,15 +17,12 @@ class Node
 {
 public:
     Node()
-    :Node(-1)
-    {
-    }
+    :Node(-1) 
+    {}
 
     Node(int v)
-    :val(v)
-    {
-    }
-
+    :val(v) 
+    {}
 
     int val;
     atomic<Node*> next; 
@@ -293,11 +290,7 @@ int main()
 
     auto end = std::chrono::steady_clock::now();
     cout << "Total Time: "  << std::chrono::duration_cast<chrono::microseconds>(end - start).count()/1000.0 << " ms" << endl;
-    // int r;
-    // while(q.pop(r))
-    // {
-    //     cout << "pop: " << r << endl;
-    // }
+
 
     return 0;
 }
