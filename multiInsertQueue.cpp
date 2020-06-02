@@ -2,13 +2,15 @@
 #include <atomic>
 #include <thread>
 #include <mutex>
+#include <chrono>
+#include <vector>
 #include <functional>
 using namespace std;
 
 static const uint64_t MARK_BIT = 0xaa000000000000;
 static const uint64_t MASK     = 0x00FFFFFFFFFFFF;
 
-static const int TIMES = 10000;
+static const int TIMES = 100000;
 static const int NUM_THREAD = 16; 
 
 class Node
@@ -42,28 +44,19 @@ public:
 };
 
 
-class MSQueue
+class MSQueue : public QueueInterface
 {
 public:
     MSQueue()
     {
+        cout << "Constructing MSQueue" << endl;
         Node* dummy = new Node();
         dummy->next.store(nullptr);
         head.store(dummy);
         tail.store(dummy);
     }
 
-    MSQueue(const MSQueue& ms)
-    {
-        Node* dummy = new Node();
-        dummy->next.store(nullptr);
-        head.store(dummy);
-        tail.store(dummy);
-        // SHOULD NOT BE CALLED
-    }
-
-
-    void push(int v)
+    void push(int v) override
     {
         Node* newNode = new Node(v);
         newNode->next.store(nullptr);
@@ -93,7 +86,7 @@ public:
     }
 
 
-    bool pop(int &ret)
+    bool pop(int &ret) override
     {
         while(true)
         {
@@ -127,19 +120,16 @@ public:
         }
         return true;
     }
-
-public:
-    atomic<Node*> head;
-    atomic<Node*> tail;
 };
 
 
 
-class AwesomeQueue
+class AwesomeQueue : public QueueInterface
 {
 public:
     AwesomeQueue()
     {
+        cout << "Constructing AwesomeQueue" << endl;
         Node* dummy = new Node();
         dummy->next.store(setMark(nullptr));
         head.store(dummy);
@@ -147,7 +137,7 @@ public:
     }
 
 
-    void push(int v)
+    void push(int v) override
     {
         // lock_guard<mutex> lg(lock);
         Node* newNode = new Node(v);
@@ -181,17 +171,14 @@ public:
                 {
                     this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
                 }
-                
 
-                //Tail always store clear-mark version.
-                this->tail.compare_exchange_strong(localTail, clearMark(localTailNext));
                 // Some excited stuff here!
+                // Insert in the middle
                 for(int i = 0 ; i < NUM_THREAD-1 ; i++)
                 {
                     localTailNext = localTail->next.load();
                     if(isDeleted(localTailNext))
                     {
-                        cout << "DELETED!!" << endl;
                         break;
                     }
                     newNode->next.store(localTailNext);
@@ -200,14 +187,12 @@ public:
                         return;
                     }
                 }
-                cout << "WRONG!!" << endl;
             }
         }
     }
 
-    bool pop(int& ret)
+    bool pop(int& ret)  override
     {
-        // lock_guard<mutex> lg(lock);
         while(true)
         {
            Node* localHead = this->head.load();
@@ -220,7 +205,6 @@ public:
                    {
                        return false;
                    }
-                   cout << "1: CHANGE: " << clearMark(localHeadNext) << endl;
                    this->head.compare_exchange_strong(localHead, clearMark(localHeadNext));
                    continue;
                }
@@ -249,39 +233,39 @@ public:
         return reinterpret_cast<uint64_t>(addr) & MARK_BIT;
     }
 
-public:
-    atomic<Node*> head;
-    atomic<Node*> tail;
-    mutex lock;
 };
 
-void insertTestA(AwesomeQueue &ms)
+void insertTestA(QueueInterface &q)
 {
     int r;
     for(int i = 0 ; i < TIMES ; i++)
     {
-        // ms.push(i);
-        ms.pop(r);
-        ms.pop(r);
-        // cout << ms.head << " " << ms.tail <<endl; 
+        if (i % 20 == 0)
+        {
+            q.pop(r);
+        }
+        else
+        {
+            q.push(i);
+        }
     }
 }
 
-void insertTestB(AwesomeQueue &ms)
+void insertTestB(QueueInterface &q)
 {
     for(int i = 0 ; i < TIMES ; i++)
     {
-        ms.push(-i);
-        
+        q.push(i);
     }
 }
 
-void insertTestC(AwesomeQueue &ms)
+// For moniter head and tail concurrently
+void insertTestC(QueueInterface &q)
 {
     while(true)
     {
-        cout << "MONITOR: " << ms.head << ' ' << ms.tail << endl;
-        std::this_thread::sleep_for(0.01s);
+        cout << "MONITOR: " << q.head << ' ' << q.tail << endl;
+        std::this_thread::sleep_for(0.1s);
     }
 }
 
@@ -289,32 +273,31 @@ void insertTestC(AwesomeQueue &ms)
 
 int main()
 {
-    AwesomeQueue ms;
-
-    thread t1(insertTestA, ref(ms));
-    thread t2(insertTestB, ref(ms));
-    thread t3(insertTestC, ref(ms));
+    // Already use polymorphism
+    // Just Change the Type "MSqueue" or "AwesomeQueue"
+    MSQueue q;
+    vector<thread> workers;
+    auto start = std::chrono::steady_clock::now();
+    for(int i = 0 ; i < NUM_THREAD ; i++)
+    {
+        workers.push_back(std::move(thread{insertTestA, std::ref(q)}));
+    }
 
     
-    t1.join();
-    t2.join();
-    t3.join();
-    // for(int i = 0 ; i < TIMES ; i++)
-    // {
-    //     ms.push(i);
-    // }
-
-
-    int r;
-    int cnt = 0;
-    // while(ms.pop(r))
-    // {
-    //     cnt++;
-    //     cout << "HE" <<endl;
-    // }
    
+   for(auto &t : workers)
+   {
+       t.join();
+   }
 
-    cout << "Number of items in the queue: " << cnt << endl;
+
+    auto end = std::chrono::steady_clock::now();
+    cout << "Total Time: "  << std::chrono::duration_cast<chrono::microseconds>(end - start).count()/1000.0 << " ms" << endl;
+    // int r;
+    // while(q.pop(r))
+    // {
+    //     cout << "pop: " << r << endl;
+    // }
 
     return 0;
 }
