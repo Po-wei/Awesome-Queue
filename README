@@ -1,0 +1,6 @@
+My environment:
+Ubuntu 18.04.4 LTS
+gcc version 9.3.0
+
+build:
+g++ multiInsertQueue.cpp -lpthread -latomic -std=c++14
